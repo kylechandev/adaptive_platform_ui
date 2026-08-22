@@ -152,10 +152,6 @@ class iOS26ButtonView: NSObject, FlutterPlatformView {
         // Add tap action
         button.addTarget(self, action: #selector(buttonTapped), for: .touchUpInside)
 
-        // Add press animation targets
-        button.addTarget(self, action: #selector(buttonPressed), for: .touchDown)
-        button.addTarget(self, action: #selector(buttonReleased), for: [.touchUpInside, .touchUpOutside, .touchCancel])
-
         // Apply enabled state
         button.isEnabled = isEnabled
     }
@@ -312,20 +308,6 @@ class iOS26ButtonView: NSObject, FlutterPlatformView {
         }
 
         button.contentEdgeInsets = UIEdgeInsets(top: 8, left: 16, bottom: 8, right: 16)
-    }
-
-    @objc private func buttonPressed() {
-        // iOS 26 spring animation on press
-        UIView.animate(withDuration: 0.1, delay: 0, options: .curveEaseOut) {
-            self.button.transform = CGAffineTransform(scaleX: 0.95, y: 0.95)
-        }
-    }
-
-    @objc private func buttonReleased() {
-        // Return to normal size with spring effect
-        UIView.animate(withDuration: 0.2, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0.5, options: .curveEaseInOut) {
-            self.button.transform = .identity
-        }
     }
 
     @objc private func buttonTapped() {
