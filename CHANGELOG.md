@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+* **NEW**: `AdaptiveNavigationDestination.iconColor` keeps an individual `IOS26NativeTabBar` icon colored in both states, including after theme updates and native item rebuilds.
+
 ## [0.1.111]
 * **NEW**: Custom SF Symbols on iOS. `AdaptiveAppBarAction`, native buttons, and the tab bar now fall back to a bundle asset (`UIImage(named:)`) when a name is not a system SF Symbol, so custom symbols or images from the app's asset catalog work (@hieutbui)
 * **NEW**: `iconWidget` on `AdaptiveAppBarAction` for a custom fallback widget (e.g. an SVG) on iOS <26 and Android (@hieutbui)

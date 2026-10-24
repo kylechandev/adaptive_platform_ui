@@ -15,6 +15,7 @@ class AdaptiveNavigationDestination {
     required this.icon,
     required this.label,
     this.selectedIcon,
+    this.iconColor,
     this.isSearch = false,
     this.badgeCount,
     this.addSpacerAfter = false,
@@ -38,6 +39,11 @@ class AdaptiveNavigationDestination {
   /// `String` (e.g. `magazine.fill`) which the iOS 26+ native tab bar applies
   /// when the destination is selected. Falls back to [icon] when null.
   final dynamic selectedIcon;
+
+  /// Fixed icon color for both selected and unselected states in
+  /// [IOS26NativeTabBar]. Null preserves the tab bar's default icon colors.
+  /// Does not change the label color or system search items.
+  final Color? iconColor;
 
   /// Whether this is a search tab (iOS 26+)
   /// Search tabs are visually separated and transform into a search field

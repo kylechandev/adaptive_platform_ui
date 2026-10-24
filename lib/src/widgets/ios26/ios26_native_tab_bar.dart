@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -62,6 +61,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
   List<String>? _lastNetworkIcons;
   List<String>? _lastSelectedNetworkIcons;
   List<int?>? _lastBadgeCounts;
+  List<int?>? _lastIconColors;
   TabBarMinimizeBehavior? _lastMinimizeBehavior;
   bool? _lastHidden;
 
@@ -171,9 +171,14 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
       .map((e) => _extractNetworkUrl(e.selectedIcon ?? e.icon))
       .toList();
 
+  /// Serialize optional colors without losing null entries for other items.
+  List<int?> _mapIconColors() => widget.destinations
+      .map((e) => e.iconColor == null ? null : _colorToARGB(e.iconColor!))
+      .toList();
+
   @override
   Widget build(BuildContext context) {
-    if (!kIsWeb && Platform.isIOS) {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
       final labels = widget.destinations.map((e) => e.label).toList();
       final symbols = _mapSymbols();
       final selectedSymbols = _mapSelectedSymbols();
@@ -200,6 +205,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
         'selectedFileIcons': selectedFileIcons,
         'networkIcons': networkIcons,
         'selectedNetworkIcons': selectedNetworkIcons,
+        'iconColors': _mapIconColors(),
         'searchFlags': searchFlags,
         'badgeCounts': badgeCounts,
         'spacerFlags': spacerFlags,
@@ -342,6 +348,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
     }
 
     // Items update (for hot reload or dynamic changes)
+    final iconColors = _mapIconColors();
     final labels = widget.destinations.map((e) => e.label).toList();
     final symbols = _mapSymbols();
     final selectedSymbols = _mapSelectedSymbols();
@@ -363,7 +370,8 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
         _lastSelectedFileIcons?.join('|') != selectedFileIcons.join('|') ||
         _lastNetworkIcons?.join('|') != networkIcons.join('|') ||
         _lastSelectedNetworkIcons?.join('|') !=
-            selectedNetworkIcons.join('|')) {
+            selectedNetworkIcons.join('|') ||
+        !listEquals(_lastIconColors, iconColors)) {
       await ch.invokeMethod('setItems', {
         'labels': labels,
         'sfSymbols': symbols,
@@ -374,6 +382,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
         'selectedFileIcons': selectedFileIcons,
         'networkIcons': networkIcons,
         'selectedNetworkIcons': selectedNetworkIcons,
+        'iconColors': _mapIconColors(),
         'searchFlags': searchFlags,
         'badgeCounts': badgeCounts,
         'selectedIndex': widget.selectedIndex,
@@ -387,6 +396,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
       _lastSelectedFileIcons = selectedFileIcons;
       _lastNetworkIcons = networkIcons;
       _lastSelectedNetworkIcons = selectedNetworkIcons;
+      _lastIconColors = iconColors;
       _requestIntrinsicSize();
     }
 
@@ -443,6 +453,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
     _lastSelectedFileIcons = _mapSelectedFileIcons();
     _lastNetworkIcons = _mapNetworkIcons();
     _lastSelectedNetworkIcons = _mapSelectedNetworkIcons();
+    _lastIconColors = _mapIconColors();
     _lastBadgeCounts = widget.destinations.map((e) => e.badgeCount).toList();
   }
 
@@ -493,6 +504,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
         'selectedFileIcons': selectedFileIcons,
         'networkIcons': networkIcons,
         'selectedNetworkIcons': selectedNetworkIcons,
+        'iconColors': _mapIconColors(),
         'searchFlags': searchFlags,
         'badgeCounts': badgeCounts,
         'selectedIndex': widget.selectedIndex,

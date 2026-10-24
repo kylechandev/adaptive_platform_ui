@@ -35,6 +35,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
     private var currentSelectedNetworkIcons: [String] = []
     private var currentSearchFlags: [Bool] = []
     private var currentBadgeCounts: [Int?] = []
+    private var currentIconColors: [Int?] = []
     private let imageCache = NSCache<NSString, UIImage>()
 
     init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
@@ -55,6 +56,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
         var selectedNetworkIcons: [String] = []
         var searchFlags: [Bool] = []
         var badgeCounts: [Int?] = []
+        var iconColors: [Int?] = []
         var spacerFlags: [Bool] = []
         var selectedIndex: Int = 0
         var isDark: Bool = false
@@ -78,6 +80,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
             selectedNetworkIcons = (dict["selectedNetworkIcons"] as? [String]) ?? []
             searchFlags = (dict["searchFlags"] as? [Bool]) ?? []
             spacerFlags = (dict["spacerFlags"] as? [Bool]) ?? []
+            iconColors = (dict["iconColors"] as? [Any] ?? []).map { ($0 as? NSNumber)?.intValue }
             if let badgeData = dict["badgeCounts"] as? [NSNumber?] {
                 badgeCounts = badgeData.map { $0?.intValue }
             }
@@ -94,6 +97,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
         }
 
         super.init()
+        self.currentIconColors = iconColors
 
         container.backgroundColor = .clear
         if #available(iOS 13.0, *) {
@@ -271,6 +275,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
                     item.badgeValue = nil
                 }
 
+                self.applyIconColor(to: item, index: i)
                 items.append(item)
             }
             return items
@@ -384,6 +389,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
                 badgeCounts = badgeData.map { $0?.intValue }
             }
             
+            self.currentIconColors = (args["iconColors"] as? [Any] ?? []).map { ($0 as? NSNumber)?.intValue }
             self.currentLabels = labels
             self.currentSymbols = symbols
             self.currentSelectedSymbols = selectedSymbols
@@ -499,6 +505,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
                         item.badgeValue = nil
                     }
 
+                    self.applyIconColor(to: item, index: i)
                     items.append(item)
                 }
                 return items
@@ -737,6 +744,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
                 item.badgeValue = count > 99 ? "99+" : String(count)
             }
 
+            self.applyIconColor(to: item, index: i)
             items.append(item)
         }
 
@@ -842,6 +850,15 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
         }.resume()
     }
 
+    /// Preserve a per-item color instead of letting UIKit apply the shared tab tint.
+    private func applyIconColor(to item: UITabBarItem, index: Int) {
+        guard index < currentIconColors.count,
+              let argb = currentIconColors[index] else { return }
+        let color = Self.colorFromARGB(argb)
+        item.image = item.image?.withTintColor(color, renderingMode: .alwaysOriginal)
+        item.selectedImage = item.selectedImage?.withTintColor(color, renderingMode: .alwaysOriginal)
+    }
+
     private func configureRuntimeImages(for item: UITabBarItem, index: Int) -> Bool {
         guard hasRuntimeImage(for: index) else { return false }
 
@@ -857,19 +874,21 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
         item.selectedImage = (selectedImage ?? unselectedImage ?? placeholderAvatarImage())?.withRenderingMode(.alwaysOriginal)
 
         if unselectedImage == nil && !unselectedNetwork.isEmpty {
-            fetchNetworkImageIfNeeded(urlString: unselectedNetwork) { [weak item] avatar in
+            fetchNetworkImageIfNeeded(urlString: unselectedNetwork) { [weak self, weak item] avatar in
                 guard let item = item, let avatar = avatar else { return }
                 item.image = avatar.withRenderingMode(.alwaysOriginal)
                 if selectedImage == nil && selectedNetwork.isEmpty && selectedFile.isEmpty {
                     item.selectedImage = avatar.withRenderingMode(.alwaysOriginal)
                 }
+                self?.applyIconColor(to: item, index: index)
             }
         }
 
         if selectedImage == nil && !selectedNetwork.isEmpty {
-            fetchNetworkImageIfNeeded(urlString: selectedNetwork) { [weak item] avatar in
+            fetchNetworkImageIfNeeded(urlString: selectedNetwork) { [weak self, weak item] avatar in
                 guard let item = item, let avatar = avatar else { return }
                 item.selectedImage = avatar.withRenderingMode(.alwaysOriginal)
+                self?.applyIconColor(to: item, index: index)
             }
         }
 
