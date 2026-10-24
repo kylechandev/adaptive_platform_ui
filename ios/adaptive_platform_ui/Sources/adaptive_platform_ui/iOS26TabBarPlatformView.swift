@@ -36,6 +36,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
     private var currentSearchFlags: [Bool] = []
     private var currentBadgeCounts: [Int?] = []
     private var currentIconColors: [Int?] = []
+    private var currentIconSizes: [Double?] = []
     private let imageCache = NSCache<NSString, UIImage>()
 
     init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
@@ -57,6 +58,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
         var searchFlags: [Bool] = []
         var badgeCounts: [Int?] = []
         var iconColors: [Int?] = []
+        var iconSizes: [Double?] = []
         var spacerFlags: [Bool] = []
         var selectedIndex: Int = 0
         var isDark: Bool = false
@@ -81,6 +83,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
             searchFlags = (dict["searchFlags"] as? [Bool]) ?? []
             spacerFlags = (dict["spacerFlags"] as? [Bool]) ?? []
             iconColors = (dict["iconColors"] as? [Any] ?? []).map { ($0 as? NSNumber)?.intValue }
+            iconSizes = (dict["iconSizes"] as? [Any] ?? []).map { ($0 as? NSNumber)?.doubleValue }
             if let badgeData = dict["badgeCounts"] as? [NSNumber?] {
                 badgeCounts = badgeData.map { $0?.intValue }
             }
@@ -98,6 +101,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
 
         super.init()
         self.currentIconColors = iconColors
+        self.currentIconSizes = iconSizes
 
         container.backgroundColor = .clear
         if #available(iOS 13.0, *) {
@@ -275,7 +279,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
                     item.badgeValue = nil
                 }
 
-                self.applyIconColor(to: item, index: i)
+                self.applyIconAppearance(to: item, index: i)
                 items.append(item)
             }
             return items
@@ -390,6 +394,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
             }
             
             self.currentIconColors = (args["iconColors"] as? [Any] ?? []).map { ($0 as? NSNumber)?.intValue }
+            self.currentIconSizes = (args["iconSizes"] as? [Any] ?? []).map { ($0 as? NSNumber)?.doubleValue }
             self.currentLabels = labels
             self.currentSymbols = symbols
             self.currentSelectedSymbols = selectedSymbols
@@ -505,7 +510,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
                         item.badgeValue = nil
                     }
 
-                    self.applyIconColor(to: item, index: i)
+                    self.applyIconAppearance(to: item, index: i)
                     items.append(item)
                 }
                 return items
@@ -744,7 +749,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
                 item.badgeValue = count > 99 ? "99+" : String(count)
             }
 
-            self.applyIconColor(to: item, index: i)
+            self.applyIconAppearance(to: item, index: i)
             items.append(item)
         }
 
@@ -850,8 +855,20 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
         }.resume()
     }
 
-    /// Preserve a per-item color instead of letting UIKit apply the shared tab tint.
-    private func applyIconColor(to item: UITabBarItem, index: Int) {
+    /// Apply per-item size before color so both states retain their native tint behavior.
+    private func applyIconAppearance(to item: UITabBarItem, index: Int) {
+        if index < currentIconSizes.count, let size = currentIconSizes[index], size.isFinite, size > 0 {
+            let targetSize = CGSize(width: size, height: size)
+            // Rasterizing prevents UIKit from normalizing the SF Symbol back to its default size.
+            if let image = item.image {
+                item.image = resizeImage(image: image, targetSize: targetSize, allowUpscaling: true)
+                    .withRenderingMode(image.renderingMode)
+            }
+            if let image = item.selectedImage {
+                item.selectedImage = resizeImage(image: image, targetSize: targetSize, allowUpscaling: true)
+                    .withRenderingMode(image.renderingMode)
+            }
+        }
         guard index < currentIconColors.count,
               let argb = currentIconColors[index] else { return }
         let color = Self.colorFromARGB(argb)
@@ -880,7 +897,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
                 if selectedImage == nil && selectedNetwork.isEmpty && selectedFile.isEmpty {
                     item.selectedImage = avatar.withRenderingMode(.alwaysOriginal)
                 }
-                self?.applyIconColor(to: item, index: index)
+                self?.applyIconAppearance(to: item, index: index)
             }
         }
 
@@ -888,16 +905,17 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
             fetchNetworkImageIfNeeded(urlString: selectedNetwork) { [weak self, weak item] avatar in
                 guard let item = item, let avatar = avatar else { return }
                 item.selectedImage = avatar.withRenderingMode(.alwaysOriginal)
-                self?.applyIconColor(to: item, index: index)
+                self?.applyIconAppearance(to: item, index: index)
             }
         }
 
         return true
     }
 
-    private func resizeImage(image: UIImage, targetSize: CGSize = CGSize(width: 26, height: 26)) -> UIImage {
+    /// Fit within the target bounds, allowing enlargement only for explicit icon sizes.
+    private func resizeImage(image: UIImage, targetSize: CGSize = CGSize(width: 26, height: 26), allowUpscaling: Bool = false) -> UIImage {
         let size = image.size
-        if size.width <= targetSize.width && size.height <= targetSize.height {
+        if !allowUpscaling && size.width <= targetSize.width && size.height <= targetSize.height {
             return image
         }
         

@@ -7,8 +7,12 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Keep the same native view while changing only item colors or brightness.
-Widget _tabBar(Color? color, {Brightness brightness = Brightness.light}) {
+/// Keep the same native view while changing only icon appearance or brightness.
+Widget _tabBar(
+  Color? color, {
+  Brightness brightness = Brightness.light,
+  double? iconSize,
+}) {
   return CupertinoApp(
     home: MediaQuery(
       data: MediaQueryData(platformBrightness: brightness),
@@ -19,6 +23,7 @@ Widget _tabBar(Color? color, {Brightness brightness = Brightness.light}) {
             icon: 'plus.capsule.fill',
             label: '',
             iconColor: color,
+            iconSize: iconSize,
           ),
         ],
         selectedIndex: 0,
@@ -73,6 +78,63 @@ void main() {
     }
     channels.clear();
   });
+
+  test('rejects invalid icon sizes', () {
+    for (final size in [
+      0.0,
+      -1.0,
+      double.nan,
+      double.infinity,
+      double.negativeInfinity,
+    ]) {
+      expect(
+        () => AdaptiveNavigationDestination(
+          icon: 'plus.capsule.fill',
+          label: '',
+          iconSize: size,
+        ),
+        throwsAssertionError,
+      );
+    }
+  });
+
+  testWidgets(
+    'synchronizes one icon size independently and restores the default',
+    (tester) async {
+      const color = Color(0xFF7297FF);
+      await tester.pumpWidget(_tabBar(color, iconSize: 32));
+      await tester.pumpAndSettle();
+      expect(creationParams?['iconSizes'], [null, 32.0]);
+      expect(
+        calls
+            .where((call) => call.method == 'setItems')
+            .last
+            .arguments['iconSizes'],
+        [null, 32.0],
+      );
+
+      calls.clear();
+      await tester.pumpWidget(_tabBar(color, iconSize: 24));
+      await tester.pumpAndSettle();
+      final update = calls.where((call) => call.method == 'setItems').single;
+      expect(update.arguments['iconSizes'], [null, 24.0]);
+      expect(update.arguments['iconColors'], [null, 0xFF7297FF]);
+      expect(update.arguments['selectedIndex'], 0);
+
+      calls.clear();
+      await tester.pumpWidget(_tabBar(color));
+      await tester.pumpAndSettle();
+      expect(
+        calls
+            .where((call) => call.method == 'setItems')
+            .single
+            .arguments['iconSizes'],
+        [null, null],
+      );
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
 
   testWidgets(
     'sends one item color on creation and synchronizes changes and removal',

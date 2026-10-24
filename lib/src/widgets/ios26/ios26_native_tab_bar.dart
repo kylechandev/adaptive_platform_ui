@@ -62,6 +62,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
   List<String>? _lastSelectedNetworkIcons;
   List<int?>? _lastBadgeCounts;
   List<int?>? _lastIconColors;
+  List<double?>? _lastIconSizes;
   TabBarMinimizeBehavior? _lastMinimizeBehavior;
   bool? _lastHidden;
 
@@ -171,6 +172,10 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
       .map((e) => _extractNetworkUrl(e.selectedIcon ?? e.icon))
       .toList();
 
+  /// Preserve default sizes for items without an explicit size override.
+  List<double?> _mapIconSizes() =>
+      widget.destinations.map((e) => e.iconSize).toList();
+
   /// Serialize optional colors without losing null entries for other items.
   List<int?> _mapIconColors() => widget.destinations
       .map((e) => e.iconColor == null ? null : _colorToARGB(e.iconColor!))
@@ -206,6 +211,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
         'networkIcons': networkIcons,
         'selectedNetworkIcons': selectedNetworkIcons,
         'iconColors': _mapIconColors(),
+        'iconSizes': _mapIconSizes(),
         'searchFlags': searchFlags,
         'badgeCounts': badgeCounts,
         'spacerFlags': spacerFlags,
@@ -349,6 +355,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
 
     // Items update (for hot reload or dynamic changes)
     final iconColors = _mapIconColors();
+    final iconSizes = _mapIconSizes();
     final labels = widget.destinations.map((e) => e.label).toList();
     final symbols = _mapSymbols();
     final selectedSymbols = _mapSelectedSymbols();
@@ -371,7 +378,8 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
         _lastNetworkIcons?.join('|') != networkIcons.join('|') ||
         _lastSelectedNetworkIcons?.join('|') !=
             selectedNetworkIcons.join('|') ||
-        !listEquals(_lastIconColors, iconColors)) {
+        !listEquals(_lastIconColors, iconColors) ||
+        !listEquals(_lastIconSizes, iconSizes)) {
       await ch.invokeMethod('setItems', {
         'labels': labels,
         'sfSymbols': symbols,
@@ -383,6 +391,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
         'networkIcons': networkIcons,
         'selectedNetworkIcons': selectedNetworkIcons,
         'iconColors': _mapIconColors(),
+        'iconSizes': _mapIconSizes(),
         'searchFlags': searchFlags,
         'badgeCounts': badgeCounts,
         'selectedIndex': widget.selectedIndex,
@@ -397,6 +406,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
       _lastNetworkIcons = networkIcons;
       _lastSelectedNetworkIcons = selectedNetworkIcons;
       _lastIconColors = iconColors;
+      _lastIconSizes = iconSizes;
       _requestIntrinsicSize();
     }
 
@@ -454,6 +464,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
     _lastNetworkIcons = _mapNetworkIcons();
     _lastSelectedNetworkIcons = _mapSelectedNetworkIcons();
     _lastIconColors = _mapIconColors();
+    _lastIconSizes = _mapIconSizes();
     _lastBadgeCounts = widget.destinations.map((e) => e.badgeCount).toList();
   }
 
@@ -505,6 +516,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
         'networkIcons': networkIcons,
         'selectedNetworkIcons': selectedNetworkIcons,
         'iconColors': _mapIconColors(),
+        'iconSizes': _mapIconSizes(),
         'searchFlags': searchFlags,
         'badgeCounts': badgeCounts,
         'selectedIndex': widget.selectedIndex,

@@ -16,10 +16,14 @@ class AdaptiveNavigationDestination {
     required this.label,
     this.selectedIcon,
     this.iconColor,
+    this.iconSize,
     this.isSearch = false,
     this.badgeCount,
     this.addSpacerAfter = false,
-  });
+  }) : assert(
+         iconSize == null || (iconSize > 0 && iconSize < double.infinity),
+         'iconSize must be finite and greater than zero',
+       );
 
   /// Icon to display.
   ///
@@ -44,6 +48,11 @@ class AdaptiveNavigationDestination {
   /// [IOS26NativeTabBar]. Null preserves the tab bar's default icon colors.
   /// Does not change the label color or system search items.
   final Color? iconColor;
+
+  /// Longest icon edge in logical points in [IOS26NativeTabBar], preserving
+  /// aspect ratio in both states. Null keeps the system's default size.
+  /// Must be finite and positive. Does not resize labels or hit targets.
+  final double? iconSize;
 
   /// Whether this is a search tab (iOS 26+)
   /// Search tabs are visually separated and transform into a search field
