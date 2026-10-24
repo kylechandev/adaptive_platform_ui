@@ -63,6 +63,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
   List<int?>? _lastBadgeCounts;
   List<int?>? _lastIconColors;
   List<double?>? _lastIconSizes;
+  List<List<int>>? _lastPaletteColors;
   TabBarMinimizeBehavior? _lastMinimizeBehavior;
   bool? _lastHidden;
 
@@ -172,6 +173,21 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
       .map((e) => _extractNetworkUrl(e.selectedIcon ?? e.icon))
       .toList();
 
+  /// Resolve each symbol layer color, including dynamic colors, before sending.
+  List<List<int>> _mapPaletteColors() => widget.destinations
+      .map((e) => e.paletteColors?.map(_colorToARGB).toList() ?? <int>[])
+      .toList();
+
+  /// Compare nested color values so equal palettes do not rebuild native items.
+  bool _paletteColorsChanged(List<List<int>> colors) {
+    final previous = _lastPaletteColors;
+    return previous == null ||
+        previous.length != colors.length ||
+        Iterable<int>.generate(
+          colors.length,
+        ).any((index) => !listEquals(previous[index], colors[index]));
+  }
+
   /// Preserve default sizes for items without an explicit size override.
   List<double?> _mapIconSizes() =>
       widget.destinations.map((e) => e.iconSize).toList();
@@ -212,6 +228,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
         'selectedNetworkIcons': selectedNetworkIcons,
         'iconColors': _mapIconColors(),
         'iconSizes': _mapIconSizes(),
+        'paletteColors': _mapPaletteColors(),
         'searchFlags': searchFlags,
         'badgeCounts': badgeCounts,
         'spacerFlags': spacerFlags,
@@ -356,6 +373,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
     // Items update (for hot reload or dynamic changes)
     final iconColors = _mapIconColors();
     final iconSizes = _mapIconSizes();
+    final paletteColors = _mapPaletteColors();
     final labels = widget.destinations.map((e) => e.label).toList();
     final symbols = _mapSymbols();
     final selectedSymbols = _mapSelectedSymbols();
@@ -379,7 +397,8 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
         _lastSelectedNetworkIcons?.join('|') !=
             selectedNetworkIcons.join('|') ||
         !listEquals(_lastIconColors, iconColors) ||
-        !listEquals(_lastIconSizes, iconSizes)) {
+        !listEquals(_lastIconSizes, iconSizes) ||
+        _paletteColorsChanged(paletteColors)) {
       await ch.invokeMethod('setItems', {
         'labels': labels,
         'sfSymbols': symbols,
@@ -392,6 +411,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
         'selectedNetworkIcons': selectedNetworkIcons,
         'iconColors': _mapIconColors(),
         'iconSizes': _mapIconSizes(),
+        'paletteColors': _mapPaletteColors(),
         'searchFlags': searchFlags,
         'badgeCounts': badgeCounts,
         'selectedIndex': widget.selectedIndex,
@@ -407,6 +427,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
       _lastSelectedNetworkIcons = selectedNetworkIcons;
       _lastIconColors = iconColors;
       _lastIconSizes = iconSizes;
+      _lastPaletteColors = paletteColors;
       _requestIntrinsicSize();
     }
 
@@ -465,6 +486,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
     _lastSelectedNetworkIcons = _mapSelectedNetworkIcons();
     _lastIconColors = _mapIconColors();
     _lastIconSizes = _mapIconSizes();
+    _lastPaletteColors = _mapPaletteColors();
     _lastBadgeCounts = widget.destinations.map((e) => e.badgeCount).toList();
   }
 
@@ -517,6 +539,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
         'selectedNetworkIcons': selectedNetworkIcons,
         'iconColors': _mapIconColors(),
         'iconSizes': _mapIconSizes(),
+        'paletteColors': _mapPaletteColors(),
         'searchFlags': searchFlags,
         'badgeCounts': badgeCounts,
         'selectedIndex': widget.selectedIndex,

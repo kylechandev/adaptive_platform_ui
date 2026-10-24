@@ -37,6 +37,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
     private var currentBadgeCounts: [Int?] = []
     private var currentIconColors: [Int?] = []
     private var currentIconSizes: [Double?] = []
+    private var currentPaletteColors: [[Int]] = []
     private let imageCache = NSCache<NSString, UIImage>()
 
     init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
@@ -59,6 +60,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
         var badgeCounts: [Int?] = []
         var iconColors: [Int?] = []
         var iconSizes: [Double?] = []
+        var paletteColors: [[Int]] = []
         var spacerFlags: [Bool] = []
         var selectedIndex: Int = 0
         var isDark: Bool = false
@@ -84,6 +86,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
             spacerFlags = (dict["spacerFlags"] as? [Bool]) ?? []
             iconColors = (dict["iconColors"] as? [Any] ?? []).map { ($0 as? NSNumber)?.intValue }
             iconSizes = (dict["iconSizes"] as? [Any] ?? []).map { ($0 as? NSNumber)?.doubleValue }
+            paletteColors = (dict["paletteColors"] as? [Any] ?? []).map { ($0 as? [NSNumber] ?? []).map { $0.intValue } }
             if let badgeData = dict["badgeCounts"] as? [NSNumber?] {
                 badgeCounts = badgeData.map { $0?.intValue }
             }
@@ -102,6 +105,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
         super.init()
         self.currentIconColors = iconColors
         self.currentIconSizes = iconSizes
+        self.currentPaletteColors = paletteColors
 
         container.backgroundColor = .clear
         if #available(iOS 13.0, *) {
@@ -248,7 +252,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
                             // iOS 26+: Use different rendering modes for selected/unselected
                             if #available(iOS 26.0, *) {
                                 // Unselected: Only apply custom color if unselectedTint is provided
-                                if let unselTint = unselectedTint {
+                                if let unselTint = unselectedTint, !self.hasPaletteColors(at: i) {
                                     // Create colored image for unselected state
                                     if let originalImage = UIImage(systemName: symbols[i]) ?? UIImage(named: symbols[i]) {
                                         image = originalImage.withTintColor(unselTint, renderingMode: .alwaysOriginal)
@@ -395,6 +399,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
             
             self.currentIconColors = (args["iconColors"] as? [Any] ?? []).map { ($0 as? NSNumber)?.intValue }
             self.currentIconSizes = (args["iconSizes"] as? [Any] ?? []).map { ($0 as? NSNumber)?.doubleValue }
+            self.currentPaletteColors = (args["paletteColors"] as? [Any] ?? []).map { ($0 as? [NSNumber] ?? []).map { $0.intValue } }
             self.currentLabels = labels
             self.currentSymbols = symbols
             self.currentSelectedSymbols = selectedSymbols
@@ -480,7 +485,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
                                     let unselTint = self.tabBar?.unselectedItemTintColor
 
                                     // Unselected: Only apply custom color if unselectedTint is set
-                                    if let unselTint = unselTint {
+                                    if let unselTint = unselTint, !self.hasPaletteColors(at: i) {
                                         if let originalImage = UIImage(systemName: symbols[i]) ?? UIImage(named: symbols[i]) {
                                             image = originalImage.withTintColor(unselTint, renderingMode: .alwaysOriginal)
                                         }
@@ -726,7 +731,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
                         if #available(iOS 26.0, *) {
                             let unselTint = bar.unselectedItemTintColor
 
-                            if let unselTint = unselTint {
+                            if let unselTint = unselTint, !hasPaletteColors(at: i) {
                                 if let originalImage = UIImage(systemName: currentSymbols[i]) ?? UIImage(named: currentSymbols[i]) {
                                     image = originalImage.withTintColor(unselTint, renderingMode: .alwaysOriginal)
                                 }
@@ -855,25 +860,43 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
         }.resume()
     }
 
-    /// Apply per-item size before color so both states retain their native tint behavior.
+    /// Keep symbol layers intact until the palette is applied, including color rebuilds.
+    private func hasPaletteColors(at index: Int) -> Bool {
+        return index < currentPaletteColors.count && !currentPaletteColors[index].isEmpty
+    }
+
+    /// Apply the same appearance to both states, including mixed symbol/bitmap items.
     private func applyIconAppearance(to item: UITabBarItem, index: Int) {
-        if index < currentIconSizes.count, let size = currentIconSizes[index], size.isFinite, size > 0 {
-            let targetSize = CGSize(width: size, height: size)
-            // Rasterizing prevents UIKit from normalizing the SF Symbol back to its default size.
-            if let image = item.image {
-                item.image = resizeImage(image: image, targetSize: targetSize, allowUpscaling: true)
-                    .withRenderingMode(image.renderingMode)
-            }
-            if let image = item.selectedImage {
-                item.selectedImage = resizeImage(image: image, targetSize: targetSize, allowUpscaling: true)
-                    .withRenderingMode(image.renderingMode)
+        item.image = styledIcon(item.image, index: index)
+        item.selectedImage = styledIcon(item.selectedImage, index: index)
+    }
+
+    /// Configure symbol layers before resizing and preserve them instead of tinting the whole image.
+    private func styledIcon(_ image: UIImage?, index: Int) -> UIImage? {
+        guard var image = image else { return nil }
+        var hasPalette = false
+        if #available(iOS 15.0, *), image.isSymbolImage,
+           hasPaletteColors(at: index) {
+            let colors = currentPaletteColors[index].map { Self.colorFromARGB($0) }
+            if let colored = image.applyingSymbolConfiguration(UIImage.SymbolConfiguration(paletteColors: colors)) {
+                image = colored.withRenderingMode(.automatic)
+                hasPalette = true
             }
         }
+
+        if index < currentIconSizes.count, let size = currentIconSizes[index], size.isFinite, size > 0 {
+            let mode = image.renderingMode
+            // Rasterizing prevents UIKit from normalizing the SF Symbol back to its default size.
+            image = resizeImage(image: image, targetSize: CGSize(width: size, height: size), allowUpscaling: true)
+                .withRenderingMode(mode)
+        } else if hasPalette {
+            // UIKit may replace palette colors while SF Symbol metadata is retained.
+            image = resizeImage(image: image, targetSize: image.size, allowUpscaling: true)
+        }
+        if hasPalette { return image.withRenderingMode(.alwaysOriginal) }
         guard index < currentIconColors.count,
-              let argb = currentIconColors[index] else { return }
-        let color = Self.colorFromARGB(argb)
-        item.image = item.image?.withTintColor(color, renderingMode: .alwaysOriginal)
-        item.selectedImage = item.selectedImage?.withTintColor(color, renderingMode: .alwaysOriginal)
+              let argb = currentIconColors[index] else { return image }
+        return image.withTintColor(Self.colorFromARGB(argb), renderingMode: .alwaysOriginal)
     }
 
     private func configureRuntimeImages(for item: UITabBarItem, index: Int) -> Bool {

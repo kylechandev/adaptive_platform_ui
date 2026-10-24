@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+* **NEW**: `AdaptiveNavigationDestination.paletteColors` applies ordered SF Symbol layer colors to both native tab states, preserving palettes through resizing, theme updates, and native rebuilds.
 * **NEW**: `AdaptiveNavigationDestination.iconSize` sets an individual native tab icon's longest edge in logical points, preserving aspect ratio, tint, and the default size of other items.
 * **NEW**: `AdaptiveNavigationDestination.iconColor` keeps an individual `IOS26NativeTabBar` icon colored in both states, including after theme updates and native item rebuilds.
 

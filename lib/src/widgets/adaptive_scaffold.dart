@@ -16,6 +16,7 @@ class AdaptiveNavigationDestination {
     required this.label,
     this.selectedIcon,
     this.iconColor,
+    this.paletteColors,
     this.iconSize,
     this.isSearch = false,
     this.badgeCount,
@@ -48,6 +49,12 @@ class AdaptiveNavigationDestination {
   /// [IOS26NativeTabBar]. Null preserves the tab bar's default icon colors.
   /// Does not change the label color or system search items.
   final Color? iconColor;
+
+  /// Colors in SF Symbol layer order for both states in [IOS26NativeTabBar].
+  /// For `plus.capsule.fill`, use `[Colors.white, themeColor]` for a white plus.
+  /// Overrides [iconColor] for symbol images on iOS 15+. Null or an empty list
+  /// uses the existing single-color behavior; bitmap icons are unaffected.
+  final List<Color>? paletteColors;
 
   /// Longest icon edge in logical points in [IOS26NativeTabBar], preserving
   /// aspect ratio in both states. Null keeps the system's default size.

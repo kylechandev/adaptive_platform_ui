@@ -12,6 +12,7 @@ Widget _tabBar(
   Color? color, {
   Brightness brightness = Brightness.light,
   double? iconSize,
+  List<Color>? paletteColors,
 }) {
   return CupertinoApp(
     home: MediaQuery(
@@ -24,6 +25,7 @@ Widget _tabBar(
             label: '',
             iconColor: color,
             iconSize: iconSize,
+            paletteColors: paletteColors,
           ),
         ],
         selectedIndex: 0,
@@ -78,6 +80,117 @@ void main() {
     }
     channels.clear();
   });
+
+  testWidgets(
+    'synchronizes palette layer order, changes, and removal without unnecessary rebuilds',
+    (tester) async {
+      const blue = Color(0xFF7297FF);
+      const white = Color(0xFFFFFFFF);
+      await tester.pumpWidget(
+        _tabBar(blue, iconSize: 40, paletteColors: [white, blue]),
+      );
+      await tester.pumpAndSettle();
+      expect(creationParams?['paletteColors'], [
+        <int>[],
+        [0xFFFFFFFF, 0xFF7297FF],
+      ]);
+      expect(
+        calls
+            .where((call) => call.method == 'setItems')
+            .last
+            .arguments['paletteColors'],
+        [
+          <int>[],
+          [0xFFFFFFFF, 0xFF7297FF],
+        ],
+      );
+
+      calls.clear();
+      await tester.pumpWidget(
+        _tabBar(blue, iconSize: 40, paletteColors: [white, blue]),
+      );
+      await tester.pumpAndSettle();
+      expect(calls.where((call) => call.method == 'setItems'), isEmpty);
+
+      calls.clear();
+      await tester.pumpWidget(
+        _tabBar(blue, iconSize: 40, paletteColors: [blue, white]),
+      );
+      await tester.pumpAndSettle();
+      final update = calls.where((call) => call.method == 'setItems').single;
+      expect(update.arguments['paletteColors'], [
+        <int>[],
+        [0xFF7297FF, 0xFFFFFFFF],
+      ]);
+      expect(update.arguments['iconSizes'], [null, 40.0]);
+      expect(update.arguments['selectedIndex'], 0);
+
+      calls.clear();
+      await tester.pumpWidget(_tabBar(blue, iconSize: 40));
+      await tester.pumpAndSettle();
+      expect(
+        calls
+            .where((call) => call.method == 'setItems')
+            .single
+            .arguments['paletteColors'],
+        [<int>[], <int>[]],
+      );
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
+
+  testWidgets(
+    'resolves palette colors on brightness changes and detects in-place list updates',
+    (tester) async {
+      const dynamicColor = CupertinoDynamicColor.withBrightness(
+        color: Color(0xFF7297FF),
+        darkColor: Color(0xFF5CAB7D),
+      );
+      final colors = <Color>[const Color(0xFFFFFFFF), dynamicColor];
+      await tester.pumpWidget(_tabBar(null, paletteColors: colors));
+      await tester.pumpAndSettle();
+      expect(creationParams?['paletteColors'], [
+        <int>[],
+        [0xFFFFFFFF, 0xFF7297FF],
+      ]);
+
+      calls.clear();
+      await tester.pumpWidget(
+        _tabBar(null, paletteColors: colors, brightness: Brightness.dark),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        calls
+            .where((call) => call.method == 'setItems')
+            .last
+            .arguments['paletteColors'],
+        [
+          <int>[],
+          [0xFFFFFFFF, 0xFF5CAB7D],
+        ],
+      );
+
+      calls.clear();
+      colors[0] = const Color(0xFFFF0000);
+      await tester.pumpWidget(
+        _tabBar(null, paletteColors: colors, brightness: Brightness.dark),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        calls
+            .where((call) => call.method == 'setItems')
+            .single
+            .arguments['paletteColors'],
+        [
+          <int>[],
+          [0xFFFF0000, 0xFF5CAB7D],
+        ],
+      );
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
 
   test('rejects invalid icon sizes', () {
     for (final size in [
