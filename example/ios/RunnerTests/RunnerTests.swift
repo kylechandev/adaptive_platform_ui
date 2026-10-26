@@ -5,6 +5,30 @@ import XCTest
 
 class RunnerTests: XCTestCase {
 
+  /// Native highlight tracking must not make the custom long press fail.
+  func testLongPressCoexistsOnlyWithTabBarGestures() {
+    let platform = iOS26TabBarPlatformView(
+      frame: CGRect(x: 0, y: 0, width: 430, height: 83), viewId: 42,
+      args: ["labels": ["Home", "Add"], "sfSymbols": ["house", "plus"], "longPressEnabled": true],
+      messenger: TestBinaryMessenger()
+    )
+    let bar = platform.view().subviews.compactMap { $0 as? UITabBar }.first!
+    let longPress = bar.gestureRecognizers!.first { $0.delegate === platform }!
+    XCTAssertTrue(longPress.isEnabled)
+
+    let highlight = UILongPressGestureRecognizer()
+    let buttonView = UIView()
+    bar.addSubview(buttonView)
+    buttonView.addGestureRecognizer(highlight)
+    XCTAssertTrue(platform.gestureRecognizer(longPress, shouldRecognizeSimultaneouslyWith: highlight))
+    bar.addGestureRecognizer(highlight)
+    XCTAssertTrue(platform.gestureRecognizer(longPress, shouldRecognizeSimultaneouslyWith: highlight))
+
+    let outsideView = UIView()
+    outsideView.addGestureRecognizer(highlight)
+    XCTAssertFalse(platform.gestureRecognizer(longPress, shouldRecognizeSimultaneouslyWith: highlight))
+  }
+
   /// Exercise real UIKit tab layouts across widths and writing directions.
   func testNativeLongPressItemGeometry() {
     let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 430, height: 900))
@@ -46,4 +70,23 @@ class RunnerTests: XCTestCase {
     }
   }
 
+}
+
+/// Register native channels without starting a Dart engine in gesture tests.
+private final class TestBinaryMessenger: NSObject, FlutterBinaryMessenger {
+  /// Discard outbound messages; this test exercises native gesture arbitration.
+  func send(onChannel channel: String, message: Data?) {}
+
+  /// Complete requests so native code never waits on an absent Dart isolate.
+  func send(onChannel channel: String, message: Data?, binaryReply callback: FlutterBinaryReply?) {
+    callback?(nil)
+  }
+
+  /// Accept channel registrations without retaining the platform view.
+  func setMessageHandlerOnChannel(_ channel: String, binaryMessageHandler handler: FlutterBinaryMessageHandler?) -> FlutterBinaryMessengerConnection {
+    return 1
+  }
+
+  /// No channel state is retained by this test messenger.
+  func cleanUpConnection(_ connection: FlutterBinaryMessengerConnection) {}
 }

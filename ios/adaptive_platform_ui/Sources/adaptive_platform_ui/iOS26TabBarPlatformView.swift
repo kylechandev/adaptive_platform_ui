@@ -60,6 +60,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate, 
     private var tabBar: UITabBar?
     private var longPressRecognizer: UILongPressGestureRecognizer!
     private var didLongPress = false
+    private var selectedIndex = 0
     private var longPressItemIndex: Int?
     private var minimizeBehavior: Int = 3 // automatic
     private var currentLabels: [String] = []
@@ -141,6 +142,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate, 
         }
 
         super.init()
+        self.selectedIndex = selectedIndex
         self.currentIconColors = iconColors
         self.currentIconSizes = iconSizes
         self.currentPaletteColors = paletteColors
@@ -573,6 +575,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate, 
                 bar.items = buildItems(0..<count)
                 if let items = bar.items, selectedIndex >= 0, selectedIndex < items.count {
                     bar.selectedItem = items[selectedIndex]
+                    self.selectedIndex = selectedIndex
                 }
             }
             result(nil)
@@ -586,6 +589,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate, 
 
             if let bar = self.tabBar, let items = bar.items, idx >= 0, idx < items.count {
                 bar.selectedItem = items[idx]
+                self.selectedIndex = idx
             }
             result(nil)
 
@@ -822,6 +826,14 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate, 
         return longPressItemIndex != nil
     }
 
+    /// Liquid Glass tracks touch-down itself; let long press observe the same touch.
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard gestureRecognizer === longPressRecognizer,
+              let bar = tabBar, let otherView = otherGestureRecognizer.view else { return false }
+        return otherView.isDescendant(of: bar)
+    }
+
     /// Emit only the recognition transition, never changed/ended events.
     @objc private func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {
         if recognizer.state == .ended || recognizer.state == .cancelled || recognizer.state == .failed {
@@ -837,8 +849,17 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate, 
     }
 
     func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
-        guard !didLongPress else { return }
+        if didLongPress {
+            // Restore after UIKit completes tracking, which can overwrite a synchronous assignment.
+            DispatchQueue.main.async { [weak self, weak tabBar] in
+                guard let self = self, let bar = tabBar, let items = bar.items,
+                      items.indices.contains(self.selectedIndex) else { return }
+                bar.selectedItem = items[self.selectedIndex]
+            }
+            return
+        }
         if let bar = self.tabBar, bar === tabBar, let items = bar.items, let idx = items.firstIndex(of: item) {
+            selectedIndex = idx
             channel.invokeMethod("valueChanged", arguments: ["index": idx])
         }
     }

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+* **FIX**: Native tab long presses now coexist with Liquid Glass highlight gestures, suppress the release click, and preserve the selected tab.
 * **NEW**: `IOS26NativeTabBar.onLongPress` reports the pressed item index through a native long-press gesture without invoking `onTap`. Button hit testing follows native layout and RTL; the callback can be enabled or removed at runtime.
 * **NEW**: `AdaptiveNavigationDestination.paletteColors` applies ordered SF Symbol layer colors to both native tab states, preserving palettes through resizing, theme updates, and native rebuilds.
 * **NEW**: `AdaptiveNavigationDestination.iconSize` sets an individual native tab icon's longest edge in logical points, preserving aspect ratio, tint, and the default size of other items.
