@@ -13,6 +13,10 @@ Widget _tabBar(
   Brightness brightness = Brightness.light,
   double? iconSize,
   List<Color>? paletteColors,
+  String? badgeText,
+  Color? badgeColor,
+  Color? badgeTextColor,
+  ValueChanged<int>? onLongPress,
 }) {
   return CupertinoApp(
     home: MediaQuery(
@@ -26,10 +30,14 @@ Widget _tabBar(
             iconColor: color,
             iconSize: iconSize,
             paletteColors: paletteColors,
+            badgeText: badgeText,
+            badgeColor: badgeColor,
+            badgeTextColor: badgeTextColor,
           ),
         ],
         selectedIndex: 0,
         onTap: (_) {},
+        onLongPress: onLongPress,
       ),
     ),
   );
@@ -80,6 +88,76 @@ void main() {
     }
     channels.clear();
   });
+
+  // A merged tab must retain upstream badge styling alongside fork appearance.
+  testWidgets(
+    'keeps native badge styling when custom icon appearance updates',
+    (tester) async {
+      const blue = Color(0xFF7297FF);
+      const white = Color(0xFFFFFFFF);
+      final presses = <int>[];
+      await tester.pumpWidget(
+        _tabBar(
+          blue,
+          iconSize: 38,
+          paletteColors: [white, blue],
+          badgeText: 'NEW',
+          badgeColor: blue,
+          badgeTextColor: white,
+          onLongPress: presses.add,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(creationParams?['badgeTexts'], [null, 'NEW']);
+      expect(creationParams?['badgeColors'], [null, 0xFF7297FF]);
+      expect(creationParams?['badgeTextColors'], [null, 0xFFFFFFFF]);
+      expect(creationParams?['longPressEnabled'], isTrue);
+
+      calls.clear();
+      await tester.pumpWidget(
+        _tabBar(
+          blue,
+          iconSize: 40,
+          paletteColors: [white, blue],
+          badgeText: '!',
+          badgeColor: blue,
+          badgeTextColor: white,
+          onLongPress: presses.add,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final update = calls.where((call) => call.method == 'setItems').single;
+      expect(update.arguments['iconSizes'], [null, 40.0]);
+      expect(update.arguments['iconColors'], [null, 0xFF7297FF]);
+      expect(update.arguments['paletteColors'], [
+        <int>[],
+        [0xFFFFFFFF, 0xFF7297FF],
+      ]);
+      expect(update.arguments['badgeTexts'], [null, '!']);
+      expect(update.arguments['badgeColors'], [null, 0xFF7297FF]);
+      expect(update.arguments['badgeTextColors'], [null, 0xFFFFFFFF]);
+
+      calls.clear();
+      await tester.pumpWidget(
+        _tabBar(
+          blue,
+          iconSize: 40,
+          paletteColors: [white, blue],
+          onLongPress: presses.add,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(calls.where((call) => call.method == 'setItems'), isEmpty);
+      final badge = calls
+          .where((call) => call.method == 'setBadgeCounts')
+          .single;
+      expect(badge.arguments['badgeTexts'], [null, null]);
+      expect(badge.arguments['badgeColors'], [null, null]);
+      expect(badge.arguments['badgeTextColors'], [null, null]);
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
 
   testWidgets(
     'synchronizes palette layer order, changes, and removal without unnecessary rebuilds',
