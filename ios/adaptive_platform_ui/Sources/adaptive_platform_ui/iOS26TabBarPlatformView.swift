@@ -19,10 +19,48 @@ private final class LayoutAwareTabBarContainerView: UIView {
     }
 }
 
-class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
+// Keep geometry lookup separate so native layout and RTL can be regression-tested.
+extension UITabBar {
+    /// Resolve the item from current button frames, including nested iOS 26 layouts.
+    func longPressItemIndex(at point: CGPoint) -> Int? {
+        guard bounds.contains(point), let items = items, !items.isEmpty else { return nil }
+
+        // shortcut: UIKit owns the button hierarchy; revisit if unique button frames no longer map one-to-one to items.
+        func itemControls(in view: UIView) -> [UIControl] {
+            guard view.isUserInteractionEnabled, !view.isHidden, view.alpha > 0.01 else { return [] }
+            if let control = view as? UIControl { return [control] }
+            return view.subviews.flatMap { itemControls(in: $0) }
+        }
+
+        // Liquid Glass duplicates controls for its selected/unselected rendering layers.
+        let frames = subviews.flatMap { itemControls(in: $0) }
+            .map { $0.convert($0.bounds, to: self) }
+            .reduce(into: [CGRect]()) { frames, frame in
+                if !frames.contains(frame) { frames.append(frame) }
+            }.sorted {
+                effectiveUserInterfaceLayoutDirection == .rightToLeft ? $0.midX > $1.midX : $0.midX < $1.midX
+            }
+        // Reject ambiguous layouts rather than invoking an action for the wrong item.
+        guard frames.count == items.count else { return nil }
+        var hit = hitTest(point, with: nil)
+        while let view = hit, view !== self {
+            if let control = view as? UIControl {
+                guard control.isEnabled else { return nil }
+                return frames.firstIndex(of: control.convert(control.bounds, to: self))
+            }
+            hit = view.superview
+        }
+        return nil
+    }
+}
+
+class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate, UIGestureRecognizerDelegate {
     private let channel: FlutterMethodChannel
     private let container: LayoutAwareTabBarContainerView
     private var tabBar: UITabBar?
+    private var longPressRecognizer: UILongPressGestureRecognizer!
+    private var didLongPress = false
+    private var longPressItemIndex: Int?
     private var minimizeBehavior: Int = 3 // automatic
     private var currentLabels: [String] = []
     private var currentSymbols: [String] = []
@@ -117,6 +155,11 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
         let bar = UITabBar(frame: .zero)
         tabBar = bar
         bar.delegate = self
+        longPressRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
+        longPressRecognizer.delegate = self
+        longPressRecognizer.cancelsTouchesInView = true
+        longPressRecognizer.isEnabled = (args as? [String: Any])?["longPressEnabled"] as? Bool ?? false
+        bar.addGestureRecognizer(longPressRecognizer)
         bar.translatesAutoresizingMaskIntoConstraints = false
         bar.semanticContentAttribute = isRtl ? .forceRightToLeft : .forceLeftToRight
         container.semanticContentAttribute = isRtl ? .forceRightToLeft : .forceLeftToRight
@@ -367,6 +410,11 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
 
     private func handleMethodCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
+        case "setLongPressEnabled":
+            longPressRecognizer.isEnabled = (call.arguments as? [String: Any])?["enabled"] as? Bool ?? false
+            didLongPress = false
+            result(nil)
+
         case "getIntrinsicSize":
             if let bar = self.tabBar {
                 let size = bar.sizeThatFits(CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude))
@@ -766,7 +814,30 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
 
     func view() -> UIView { container }
 
+    /// Reset suppression for each new touch and ignore space outside native buttons.
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        didLongPress = false
+        guard let bar = tabBar else { return false }
+        longPressItemIndex = bar.longPressItemIndex(at: touch.location(in: bar))
+        return longPressItemIndex != nil
+    }
+
+    /// Emit only the recognition transition, never changed/ended events.
+    @objc private func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {
+        if recognizer.state == .ended || recognizer.state == .cancelled || recognizer.state == .failed {
+            // Keep suppression through touch-up delivery, but allow later accessibility selections.
+            DispatchQueue.main.async { [weak self] in self?.didLongPress = false }
+            return
+        }
+        // Keep the touch-down item stable while Liquid Glass animates its selection lens.
+        guard recognizer.state == .began, let index = longPressItemIndex,
+              let items = tabBar?.items, items.indices.contains(index) else { return }
+        didLongPress = true
+        channel.invokeMethod("longPress", arguments: ["index": index])
+    }
+
     func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
+        guard !didLongPress else { return }
         if let bar = self.tabBar, bar === tabBar, let items = bar.items, let idx = items.firstIndex(of: item) {
             channel.invokeMethod("valueChanged", arguments: ["index": idx])
         }

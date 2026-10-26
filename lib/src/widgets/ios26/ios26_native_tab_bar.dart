@@ -11,6 +11,7 @@ class IOS26NativeTabBar extends StatefulWidget {
     required this.destinations,
     required this.selectedIndex,
     required this.onTap,
+    this.onLongPress,
     this.tint,
     this.unselectedItemTint,
     this.backgroundColor,
@@ -23,6 +24,9 @@ class IOS26NativeTabBar extends StatefulWidget {
   final List<AdaptiveNavigationDestination> destinations;
   final int selectedIndex;
   final ValueChanged<int> onTap;
+
+  /// Called once when an item is long-pressed, without selecting that item.
+  final ValueChanged<int>? onLongPress;
   final Color? tint;
   final Color? unselectedItemTint;
   final Color? backgroundColor;
@@ -76,6 +80,11 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
   @override
   void didUpdateWidget(covariant IOS26NativeTabBar oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if ((oldWidget.onLongPress != null) != (widget.onLongPress != null)) {
+      _channel?.invokeMethod('setLongPressEnabled', {
+        'enabled': widget.onLongPress != null,
+      });
+    }
     _syncPropsToNativeIfNeeded();
   }
 
@@ -233,6 +242,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
         'badgeCounts': badgeCounts,
         'spacerFlags': spacerFlags,
         'selectedIndex': widget.selectedIndex,
+        'longPressEnabled': widget.onLongPress != null,
         'isDark': _isDark,
         'isRtl': _isRtl,
         'minimizeBehavior': widget.minimizeBehavior.index,
@@ -250,7 +260,13 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
               creationParamsCodec: const StandardMessageCodec(),
               onPlatformViewCreated: _onCreated,
               gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-                Factory<TapGestureRecognizer>(() => TapGestureRecognizer()),
+                // Forward touch-down immediately so UIKit owns long-press timing.
+                if (widget.onLongPress != null)
+                  Factory<EagerGestureRecognizer>(
+                    () => EagerGestureRecognizer(),
+                  )
+                else
+                  Factory<TapGestureRecognizer>(() => TapGestureRecognizer()),
               },
             )
           : const SizedBox.shrink();
@@ -273,6 +289,9 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
             (index) => CupertinoButton(
               padding: EdgeInsets.zero,
               onPressed: () => widget.onTap(index),
+              onLongPress: widget.onLongPress == null
+                  ? null
+                  : () => widget.onLongPress!(index),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -324,7 +343,13 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
   }
 
   Future<dynamic> _onMethodCall(MethodCall call) async {
-    if (call.method == 'valueChanged') {
+    if (call.method == 'longPress') {
+      final args = call.arguments;
+      final index = args is Map ? args['index'] : null;
+      if (index is int && index >= 0 && index < widget.destinations.length) {
+        widget.onLongPress?.call(index);
+      }
+    } else if (call.method == 'valueChanged') {
       final args = call.arguments as Map?;
       final idx = (args?['index'] as num?)?.toInt();
       if (idx != null) {
@@ -527,6 +552,9 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
     final badgeCounts = widget.destinations.map((e) => e.badgeCount).toList();
 
     try {
+      await ch.invokeMethod('setLongPressEnabled', {
+        'enabled': widget.onLongPress != null,
+      });
       await ch.invokeMethod('setItems', {
         'labels': labels,
         'sfSymbols': symbols,
@@ -559,7 +587,9 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
         await ch.invokeMethod('setStyle', style);
       }
 
-      await ch.invokeMethod('setSelectedIndex', {'index': widget.selectedIndex});
+      await ch.invokeMethod('setSelectedIndex', {
+        'index': widget.selectedIndex,
+      });
       _lastIndex = widget.selectedIndex;
       await _requestIntrinsicSize();
     } catch (_) {}
